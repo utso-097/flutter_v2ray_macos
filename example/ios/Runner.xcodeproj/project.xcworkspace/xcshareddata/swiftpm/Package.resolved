@@ -1,0 +1,15 @@
+{
+  "originHash" : "963657b20dee4f391ac13dc14893ba5d004cf9e9d3496069b61f09030f3503b1",
+  "pins" : [
+    {
+      "identity" : "tun2sockskit",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/blueboy-tm/Tun2socksKit",
+      "state" : {
+        "revision" : "3ffef21435e14c417d9c134b2d5fb0827b160d42",
+        "version" : "4.7.6"
+      }
+    }
+  ],
+  "version" : 3
+}

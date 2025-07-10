@@ -1,0 +1,22 @@
+PODS:
+  - flutter_v2ray (0.0.1):
+    - FlutterMacOS
+  - FlutterMacOS (1.0.0)
+
+DEPENDENCIES:
+  - flutter_v2ray (from `Flutter/ephemeral/.symlinks/plugins/flutter_v2ray/macos`)
+  - FlutterMacOS (from `Flutter/ephemeral`)
+
+EXTERNAL SOURCES:
+  flutter_v2ray:
+    :path: Flutter/ephemeral/.symlinks/plugins/flutter_v2ray/macos
+  FlutterMacOS:
+    :path: Flutter/ephemeral
+
+SPEC CHECKSUMS:
+  flutter_v2ray: ceb0caa893382293c97930cc59c1573b7dc4784e
+  FlutterMacOS: 8f6f14fa908a6fb3fba0cd85dbd81ec4b251fb24
+
+PODFILE CHECKSUM: 9ebaf0ce3d369aaa26a9ea0e159195ed94724cf3
+
+COCOAPODS: 1.16.2
