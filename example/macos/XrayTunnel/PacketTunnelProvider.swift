@@ -8,57 +8,95 @@
 import NetworkExtension
 import LibXray
 import Tun2SocksKit
-import os
 
 class PacketTunnelProvider: NEPacketTunnelProvider {
     
-    private let logger = CustomLibXrayLogger()
+    private let logger2 = CustomLibXrayLogger()
     
     override func startTunnel(options: [String : NSObject]? = nil) async throws {
-        guard
-            let protocolConfiguration = protocolConfiguration as? NETunnelProviderProtocol,
-            let providerConfiguration = protocolConfiguration.providerConfiguration
-        else {
-            fatalError()
-        }
-        guard let xrayConfig: Data = providerConfiguration["xrayConfig"] as? Data else {
-            fatalError()
-        }
-        guard let tunport: Int = parseConfig(jsonData: xrayConfig) else {
-            fatalError()
-        }
+        NSLog("🚀 [PacketTunnelProvider] Starting tunnel...")
         
-        let settings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: "254.1.1.1")
-        settings.mtu = 9000
-        settings.ipv4Settings = {
-            let settings = NEIPv4Settings(addresses: ["198.18.0.1"], subnetMasks: ["255.255.0.0"])
-            settings.includedRoutes = [NEIPv4Route.default()]
-            return settings
-        }()
-        settings.ipv6Settings = {
-            let settings = NEIPv6Settings(addresses: ["fd6e:a81b:704f:1211::1"], networkPrefixLengths: [64])
-            settings.includedRoutes = [NEIPv6Route.default()]
-            return settings
-        }()
-        settings.dnsSettings = NEDNSSettings(servers: ["8.8.8.8", "114.114.114.114"])
-        try await self.setTunnelNetworkSettings(settings)
-        self.startXRay(xrayConfig: xrayConfig)
-        self.startSocks5Tunnel(serverPort: tunport)
-        
+        do {
+            // Log the options for debugging
+            if let options = options {
+                NSLog("🔧 [PacketTunnelProvider] Tunnel options: \(options)")
+            }
+            
+            guard
+                let protocolConfiguration = protocolConfiguration as? NETunnelProviderProtocol,
+                let providerConfiguration = protocolConfiguration.providerConfiguration
+            else {
+                NSLog("❌ [PacketTunnelProvider] Failed to get protocol configuration")
+                NSLog("🔧 [PacketTunnelProvider] Protocol configuration type: \(type(of: protocolConfiguration))")
+                throw NSError(domain: "PacketTunnelProvider", code: 1, userInfo: [NSLocalizedDescriptionKey: "Failed to get protocol configuration"])
+            }
+            
+            NSLog("🔧 [PacketTunnelProvider] Provider configuration keys: \(providerConfiguration.keys)")
+            
+            guard let xrayConfig: Data = providerConfiguration["xrayConfig"] as? Data else {
+                NSLog("❌ [PacketTunnelProvider] Missing Xray configuration")
+                NSLog("🔧 [PacketTunnelProvider] Available keys in provider configuration: \(providerConfiguration.keys)")
+                throw NSError(domain: "PacketTunnelProvider", code: 2, userInfo: [NSLocalizedDescriptionKey: "Missing Xray configuration"])
+            }
+            
+            guard let tunport: Int = parseConfig(jsonData: xrayConfig) else {
+                NSLog("❌ [PacketTunnelProvider] Failed to parse config for tunnel port")
+                throw NSError(domain: "PacketTunnelProvider", code: 3, userInfo: [NSLocalizedDescriptionKey: "Failed to parse config for tunnel port"])
+            }
+            
+            NSLog("🔧 [PacketTunnelProvider] Tunnel port: \(tunport)")
+            NSLog("🔧 [PacketTunnelProvider] Xray config length: \(xrayConfig.count) bytes")
+            
+            let settings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: "254.1.1.1")
+            settings.mtu = 9000
+            settings.ipv4Settings = {
+                let settings = NEIPv4Settings(addresses: ["198.18.0.1"], subnetMasks: ["255.255.0.0"])
+                settings.includedRoutes = [NEIPv4Route.default()]
+                return settings
+            }()
+            settings.ipv6Settings = {
+                let settings = NEIPv6Settings(addresses: ["fd6e:a81b:704f:1211::1"], networkPrefixLengths: [64])
+                settings.includedRoutes = [NEIPv6Route.default()]
+                return settings
+            }()
+            settings.dnsSettings = NEDNSSettings(servers: ["8.8.8.8", "114.114.114.114"])
+            
+            NSLog("🌐 [PacketTunnelProvider] Setting tunnel network settings")
+            try await self.setTunnelNetworkSettings(settings)
+            NSLog("✅ [PacketTunnelProvider] Tunnel network settings applied")
+            
+            NSLog("🔧 [PacketTunnelProvider] Starting XRay...")
+            self.startXRay(xrayConfig: xrayConfig)
+            
+            NSLog("🔧 [PacketTunnelProvider] Starting SOCKS5 tunnel...")
+            self.startSocks5Tunnel(serverPort: tunport)
+            
+            NSLog("✅ [PacketTunnelProvider] Tunnel started successfully")
+        } catch {
+            NSLog("❌ [PacketTunnelProvider] Error starting tunnel: \(error.localizedDescription)")
+            NSLog("❌ [PacketTunnelProvider] Error domain: \((error as NSError).domain), code: \((error as NSError).code)")
+            throw error
+        }
     }
+    
     override func stopTunnel(with reason: NEProviderStopReason, completionHandler: @escaping () -> Void) {
+        NSLog("🛑 [PacketTunnelProvider] Stopping tunnel with reason: \(reason.rawValue)")
         stopXRay()
         Socks5Tunnel.quit()
-        
+        NSLog("✅ [PacketTunnelProvider] Tunnel stopped successfully")
         completionHandler()
     }
     
     override func handleAppMessage(_ messageData: Data, completionHandler: ((Data?) -> Void)?) {
         if let message = String(data: messageData, encoding: .utf8) {
+            NSLog("📨 [PacketTunnelProvider] Received app message: \(message)")
+            
             if (message == "xray_traffic"){
+                NSLog("📊 [PacketTunnelProvider] Requesting traffic stats")
                 completionHandler?("\(Socks5Tunnel.stats.up.bytes),\(Socks5Tunnel.stats.down.bytes)".data(using: .utf8))
             }else if (message.hasPrefix("xray_delay")){
                 let url = String(message[message.index(message.startIndex, offsetBy: 10)...])
+                NSLog("⏱️ [PacketTunnelProvider] Testing delay for URL: \(url)")
                 
                 // Create a ping request with the URL
                 let pingConfig = """
@@ -68,6 +106,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
                 """
                 
                 if let base64Config = pingConfig.data(using: .utf8)?.base64EncodedString() {
+                    NSLog("🔧 [PacketTunnelProvider] Sending ping request to LibXray")
                     let pingResult = LibXrayPing(base64Config)
                     
                     // Parse the result which should be base64 encoded JSON
@@ -80,39 +119,47 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
                                let success = json["success"] as? Bool,
                                success,
                                let data = json["data"] as? Int {
+                                NSLog("⏱️ [PacketTunnelProvider] Delay result: \(data)ms")
                                 completionHandler?("\(data)".data(using: .utf8))
                             } else {
+                                NSLog("❌ [PacketTunnelProvider] Ping failed or returned invalid data")
                                 completionHandler?("-1".data(using: .utf8))
                             }
                         } catch {
+                            NSLog("❌ [PacketTunnelProvider] Error parsing ping result: \(error.localizedDescription)")
                             completionHandler?("-1".data(using: .utf8))
                         }
                     } else {
+                        NSLog("❌ [PacketTunnelProvider] Invalid ping result format")
                         completionHandler?("-1".data(using: .utf8))
                     }
                 } else {
+                    NSLog("❌ [PacketTunnelProvider] Failed to encode ping config")
                     completionHandler?("-1".data(using: .utf8))
                 }
             }
             else{
+                NSLog("📨 [PacketTunnelProvider] Forwarding message to completion handler")
                 completionHandler?(messageData)
             }
             
         }else{
+            NSLog("❌ [PacketTunnelProvider] Failed to decode message data")
             completionHandler?(messageData)
         }
     }
     
     override func sleep(completionHandler: @escaping () -> Void) {
-        // Add code here to get ready to sleep.
+        NSLog("😴 [PacketTunnelProvider] Tunnel going to sleep")
         completionHandler()
     }
     
     override func wake() {
-        // Add code here to wake up.
+        NSLog("🌅 [PacketTunnelProvider] Tunnel waking up")
     }
     
     private func startSocks5Tunnel(serverPort port: Int) {
+        NSLog("🔧 [PacketTunnelProvider] Starting SOCKS5 tunnel on port \(port)")
         let config = """
         tunnel:
           mtu: 9000
@@ -128,63 +175,90 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
           log-level: debug
           limit-nofile: 65535
         """
+        NSLog("🔧 [PacketTunnelProvider] SOCKS5 config: \(config)")
         DispatchQueue.global(qos: .userInitiated).async {
-            NSLog("HEV_SOCKS5_TUNNEL_MAIN: \(Socks5Tunnel.run(withConfig: .string(content: config)))")
+            let result = Socks5Tunnel.run(withConfig: .string(content: config))
+            NSLog("🔧 [PacketTunnelProvider] SOCKS5 tunnel result: \(result)")
+            NSLog("HEV_SOCKS5_TUNNEL_MAIN: \(result)")
         }
     }
     
     private func startXRay(xrayConfig: Data) {
+        NSLog("🔧 [PacketTunnelProvider] Starting XRay with LibXray")
+        
+        // Check if LibXray is available
+        NSLog("🔧 [PacketTunnelProvider] Checking LibXray availability...")
+        
         var error: NSError?
         
         // Start XRay with the config data
         let configString = String(data: xrayConfig, encoding: .utf8) ?? ""
+        NSLog("🔧 [PacketTunnelProvider] XRay config length: \(configString.count) characters")
+        
+        NSLog("🔧 [PacketTunnelProvider] Creating XRay run request...")
         let runRequest = LibXrayNewXrayRunRequest("", configString, &error)
         
-        if error == nil {
-            let runResult = LibXrayRunXray(runRequest)
-            
-            if runResult.contains("success") {
-                print("XRay started successfully")
-            } else {
-                print("Failed to start XRay: \(runResult)")
-            }
+        if let error = error {
+            NSLog("❌ [PacketTunnelProvider] Failed to create XRay run request: \(error.localizedDescription)")
+            NSLog("❌ [PacketTunnelProvider] Error domain: \(error.domain), code: \(error.code)")
+            return
+        }
+        
+        NSLog("✅ [PacketTunnelProvider] XRay run request created successfully")
+        NSLog("🔧 [PacketTunnelProvider] Running XRay...")
+        let runResult = LibXrayRunXray(runRequest)
+        NSLog("🔧 [PacketTunnelProvider] XRay run result: \(runResult)")
+        
+        if runResult.contains("success") {
+            NSLog("🎉 [PacketTunnelProvider] XRay started successfully")
         } else {
-            print("Failed to create XRay run request: \(error?.localizedDescription ?? "Unknown error")")
+            NSLog("❌ [PacketTunnelProvider] Failed to start XRay: \(runResult)")
         }
     }
     
     private func stopXRay() {
+        NSLog("🛑 [PacketTunnelProvider] Stopping XRay")
         LibXrayStopXray()
-        print("XRay stopped " + LibXrayXrayVersion())
+        let version = LibXrayXrayVersion()
+        NSLog("🔧 [PacketTunnelProvider] XRay stopped. Version: \(version)")
+        print("XRay stopped " + version)
     }
     
     private func parseConfig(jsonData: Data) -> Int? {
+        NSLog("🔧 [PacketTunnelProvider] Parsing XRay config for tunnel port")
         do {
             if let configJSON = try JSONSerialization.jsonObject(with: jsonData, options: []) as? [String: Any],
                let inbounds = configJSON["inbounds"] as? [[String: Any]] {
                 for inbound in inbounds {
                     if let protocolType = inbound["protocol"] as? String, let port = inbound["port"] as? Int {
+                        NSLog("🔧 [PacketTunnelProvider] Found inbound: \(protocolType) on port \(port)")
                         switch protocolType {
                         case "socks":
+                            NSLog("✅ [PacketTunnelProvider] Using SOCKS port: \(port)")
                             return port
                         case "http":
+                            NSLog("✅ [PacketTunnelProvider] Using HTTP port: \(port)")
                             return port
                         default:
+                            NSLog("🔧 [PacketTunnelProvider] Skipping protocol: \(protocolType)")
                             break
                         }
                     }
                 }
             }
         } catch {
-            print("Failed to parse JSON: \(error)")
+            NSLog("❌ [PacketTunnelProvider] Failed to parse JSON: \(error)")
         }
+        NSLog("❌ [PacketTunnelProvider] No suitable tunnel port found")
         return nil;
     }
 }
 
 
 class CustomLibXrayLogger: NSObject {
+    
     func log(_ logMessage: String) {
+        NSLog("📝 [LibXrayLogger] LibXray Log: \(logMessage)")
         print("LibXray Log: \(logMessage)")
     }
 }
