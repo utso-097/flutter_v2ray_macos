@@ -1,170 +1,190 @@
+//
+//  PacketTunnelProvider.swift
+//  XrayTunnel
+//
+//  Created by Arshia Eihami on 13.11.2024.
+//
+
 import NetworkExtension
 import LibXray
 import Tun2SocksKit
 import os
 
 class PacketTunnelProvider: NEPacketTunnelProvider {
-
-    private var timer: Timer?
-    private var totalUpload: Int = 0
-    private var totalDownload: Int = 0
-    private var uploadSpeed: Int = 0
-    private var downloadSpeed: Int = 0
-
-    override func startTunnel(options: [String : NSObject]? = nil, completionHandler: @escaping (Error?) -> Void) {
-        guard let protocolConfiguration = self.protocolConfiguration as? NETunnelProviderProtocol,
-              let providerConfiguration = protocolConfiguration.providerConfiguration,
-              let configData = providerConfiguration["xrayConfig"] as? Data else {
-            completionHandler(NSError(domain: "PacketTunnelProvider", code: 1, userInfo: [NSLocalizedDescriptionKey: "Missing Xray configuration"]))
-            return
+    
+    private let logger = CustomLibXrayLogger()
+    
+    override func startTunnel(options: [String : NSObject]? = nil) async throws {
+        guard
+            let protocolConfiguration = protocolConfiguration as? NETunnelProviderProtocol,
+            let providerConfiguration = protocolConfiguration.providerConfiguration
+        else {
+            fatalError()
         }
-
-        let configString = String(decoding: configData, as: UTF8.self)
-        var error: NSError? = nil
-        let runRequest = LibXrayNewXrayRunRequest("", configString, &error)
-        if let err = error {
-            completionHandler(err)
-            return
+        guard let xrayConfig: Data = providerConfiguration["xrayConfig"] as? Data else {
+            fatalError()
         }
-        let runResult = LibXrayRunXray(runRequest)
-        if !runResult.isEmpty {
-            completionHandler(NSError(domain: "PacketTunnelProvider", code: 2, userInfo: [NSLocalizedDescriptionKey: "Failed to start Xray: \(runResult)"]))
-            return
+        guard let tunport: Int = parseConfig(jsonData: xrayConfig) else {
+            fatalError()
         }
-
-        let tunnelNetworkSettings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: "192.168.1.1")
-        tunnelNetworkSettings.mtu = 9000
-        tunnelNetworkSettings.ipv4Settings = {
-            let ipv4Settings = NEIPv4Settings(addresses: ["192.168.1.1"], subnetMasks: ["255.255.255.0"])
-            ipv4Settings.includedRoutes = [NEIPv4Route.default()]
-            return ipv4Settings
+        
+        let settings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: "254.1.1.1")
+        settings.mtu = 9000
+        settings.ipv4Settings = {
+            let settings = NEIPv4Settings(addresses: ["198.18.0.1"], subnetMasks: ["255.255.0.0"])
+            settings.includedRoutes = [NEIPv4Route.default()]
+            return settings
         }()
-
-        setTunnelNetworkSettings(tunnelNetworkSettings) { error in
-            if let error = error {
-                completionHandler(error)
-                return
-            }
-            self.startTimer()
-            completionHandler(nil)
-        }
+        settings.ipv6Settings = {
+            let settings = NEIPv6Settings(addresses: ["fd6e:a81b:704f:1211::1"], networkPrefixLengths: [64])
+            settings.includedRoutes = [NEIPv6Route.default()]
+            return settings
+        }()
+        settings.dnsSettings = NEDNSSettings(servers: ["8.8.8.8", "114.114.114.114"])
+        try await self.setTunnelNetworkSettings(settings)
+        self.startXRay(xrayConfig: xrayConfig)
+        self.startSocks5Tunnel(serverPort: tunport)
+        
     }
-
     override func stopTunnel(with reason: NEProviderStopReason, completionHandler: @escaping () -> Void) {
-        LibXrayStopXray()
-        stopTimer()
+        stopXRay()
+        Socks5Tunnel.quit()
+        
         completionHandler()
     }
-
-    override func handleAppMessage(_ messageData: Data, completionHandler: ((Data?) -> Void)? = nil) {
-        guard let messageString = String(data: messageData, encoding: .utf8) else {
-            completionHandler?(nil)
-            return
+    
+    override func handleAppMessage(_ messageData: Data, completionHandler: ((Data?) -> Void)?) {
+        if let message = String(data: messageData, encoding: .utf8) {
+            if (message == "xray_traffic"){
+                completionHandler?("\(Socks5Tunnel.stats.up.bytes),\(Socks5Tunnel.stats.down.bytes)".data(using: .utf8))
+            }else if (message.hasPrefix("xray_delay")){
+                let url = String(message[message.index(message.startIndex, offsetBy: 10)...])
+                
+                // Create a ping request with the URL
+                let pingConfig = """
+                {
+                    "url": "\(url)"
+                }
+                """
+                
+                if let base64Config = pingConfig.data(using: .utf8)?.base64EncodedString() {
+                    let pingResult = LibXrayPing(base64Config)
+                    
+                    // Parse the result which should be base64 encoded JSON
+                    if let resultData = Data(base64Encoded: pingResult),
+                       let resultString = String(data: resultData, encoding: .utf8),
+                       let jsonData = resultString.data(using: .utf8) {
+                        
+                        do {
+                            if let json = try JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
+                               let success = json["success"] as? Bool,
+                               success,
+                               let data = json["data"] as? Int {
+                                completionHandler?("\(data)".data(using: .utf8))
+                            } else {
+                                completionHandler?("-1".data(using: .utf8))
+                            }
+                        } catch {
+                            completionHandler?("-1".data(using: .utf8))
+                        }
+                    } else {
+                        completionHandler?("-1".data(using: .utf8))
+                    }
+                } else {
+                    completionHandler?("-1".data(using: .utf8))
+                }
+            }
+            else{
+                completionHandler?(messageData)
+            }
+            
+        }else{
+            completionHandler?(messageData)
         }
-      guard let tunnelProtocol = self.protocolConfiguration as? NETunnelProviderProtocol else {
-          // Handle the case where casting fails
-          completionHandler?("Error: Invalid protocol configuration".data(using: .utf8))
-          return
-      }
-
-      let providerConfig = tunnelProtocol.providerConfiguration
-      let configData = providerConfig?["xrayConfig"] as? Data ?? Data()
-
-        if messageString.hasPrefix("xray_traffic") {
-            let statsResult = LibXrayQueryStats("")
-            if let decodedData = Data(base64Encoded: statsResult) {
-                do {
-                    if let json = try JSONSerialization.jsonObject(with: decodedData, options: []) as? [String: Any],
-                       let value = json["value"] as? String {
-                        let parts = value.split(separator: ",")
-                        if parts.count == 2, let up = Int(parts[0]), let down = Int(parts[1]) {
-                            self.uploadSpeed = up - self.totalUpload
-                            self.downloadSpeed = down - self.totalDownload
-                            self.totalUpload = up
-                            self.totalDownload = down
-                            completionHandler?("\(self.totalUpload),\(self.totalDownload)".data(using: .utf8))
-                            return
+    }
+    
+    override func sleep(completionHandler: @escaping () -> Void) {
+        // Add code here to get ready to sleep.
+        completionHandler()
+    }
+    
+    override func wake() {
+        // Add code here to wake up.
+    }
+    
+    private func startSocks5Tunnel(serverPort port: Int) {
+        let config = """
+        tunnel:
+          mtu: 9000
+        socks5:
+          port: \(port)
+          address: 127.0.0.1
+          udp: 'udp'
+        misc:
+          task-stack-size: 20480
+          connect-timeout: 5000
+          read-write-timeout: 60000
+          log-file: stdout
+          log-level: debug
+          limit-nofile: 65535
+        """
+        DispatchQueue.global(qos: .userInitiated).async {
+            NSLog("HEV_SOCKS5_TUNNEL_MAIN: \(Socks5Tunnel.run(withConfig: .string(content: config)))")
+        }
+    }
+    
+    private func startXRay(xrayConfig: Data) {
+        var error: NSError?
+        
+        // Start XRay with the config data
+        let configString = String(data: xrayConfig, encoding: .utf8) ?? ""
+        let runRequest = LibXrayNewXrayRunRequest("", configString, &error)
+        
+        if error == nil {
+            let runResult = LibXrayRunXray(runRequest)
+            
+            if runResult.contains("success") {
+                print("XRay started successfully")
+            } else {
+                print("Failed to start XRay: \(runResult)")
+            }
+        } else {
+            print("Failed to create XRay run request: \(error?.localizedDescription ?? "Unknown error")")
+        }
+    }
+    
+    private func stopXRay() {
+        LibXrayStopXray()
+        print("XRay stopped " + LibXrayXrayVersion())
+    }
+    
+    private func parseConfig(jsonData: Data) -> Int? {
+        do {
+            if let configJSON = try JSONSerialization.jsonObject(with: jsonData, options: []) as? [String: Any],
+               let inbounds = configJSON["inbounds"] as? [[String: Any]] {
+                for inbound in inbounds {
+                    if let protocolType = inbound["protocol"] as? String, let port = inbound["port"] as? Int {
+                        switch protocolType {
+                        case "socks":
+                            return port
+                        case "http":
+                            return port
+                        default:
+                            break
                         }
                     }
-                } catch {
-                    print("Error decoding traffic JSON: \(error)")
                 }
             }
-            completionHandler?(nil)
-        } else if messageString.hasPrefix("xray_delay") {
-          let url = String(messageString.dropFirst("xray_delay".count))
-          do {
-              // Use the same casting approach here
-              guard let tunnelProtocol = self.protocolConfiguration as? NETunnelProviderProtocol else {
-                  completionHandler?("Error: Invalid protocol configuration".data(using: .utf8))
-                  return
-              }
-
-              let providerConfig = tunnelProtocol.providerConfiguration
-              let configData = providerConfig?["xrayConfig"] as? Data ?? Data()
-              let configPath = String(decoding: configData, as: UTF8.self)
-
-              let pingRequestDict: [String: Any] = [
-                  "datDir": "",
-                  "configPath": configPath,
-                  "timeout": 5000,
-                  "url": url,
-                  "proxy": ""
-              ]
-
-              let jsonData = try JSONSerialization.data(withJSONObject: pingRequestDict, options: [])
-              let base64EncodedRequest = jsonData.base64EncodedString()
-              let pingResult = LibXrayPing(base64EncodedRequest)
-
-              if let decodedData = Data(base64Encoded: pingResult) {
-                  if let json = try JSONSerialization.jsonObject(with: decodedData, options: []) as? [String: Any],
-                     let value = json["value"] as? Int64 {
-                      completionHandler?("\(value)".data(using: .utf8))
-                      return
-                  }
-              }
-          } catch {
-              // Handle JSON serialization errors
-              completionHandler?("Error: \(error.localizedDescription)".data(using: .utf8))
-          }
-      }else if messageString.hasPrefix("xray_version") {
-            let versionResult = LibXrayXrayVersion()
-            if let decodedData = Data(base64Encoded: versionResult) {
-                do {
-                    if let json = try JSONSerialization.jsonObject(with: decodedData, options: []) as? [String: Any],
-                       let value = json["value"] as? String {
-                        completionHandler?(value.data(using: .utf8))
-                        return
-                    }
-                } catch {
-                    print("Error decoding version JSON: \(error)")
-                }
-            }
-            completionHandler?(nil)
-        } else {
-            completionHandler?(nil)
+        } catch {
+            print("Failed to parse JSON: \(error)")
         }
+        return nil;
     }
+}
 
-    override func sleep(completionHandler: @escaping () -> Void) {
-        completionHandler()
-    }
 
-    override func wake() {
-    }
-
-    private func startTimer() {
-        self.timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true, block: { _ in
-            // Traffic stats are now queried on demand via handleAppMessage
-        })
-    }
-
-    private func stopTimer() {
-        self.timer?.invalidate()
-        self.timer = nil
-        self.uploadSpeed = 0
-        self.downloadSpeed = 0
-        self.totalUpload = 0
-        self.totalDownload = 0
+class CustomLibXrayLogger: NSObject {
+    func log(_ logMessage: String) {
+        print("LibXray Log: \(logMessage)")
     }
 }

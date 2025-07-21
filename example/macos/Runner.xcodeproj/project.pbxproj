@@ -33,7 +33,6 @@
 		394B2E612E1FA2B7004318A5 /* Tun2SocksKit in Frameworks */ = {isa = PBXBuildFile; productRef = 394B2E602E1FA2B7004318A5 /* Tun2SocksKit */; };
 		394B2E632E1FA2B7004318A5 /* Tun2SocksKitC in Frameworks */ = {isa = PBXBuildFile; productRef = 394B2E622E1FA2B7004318A5 /* Tun2SocksKitC */; };
 		394B2E662E1FA42A004318A5 /* LibXray.xcframework in Bundle Framework */ = {isa = PBXBuildFile; fileRef = 394B2E642E1FA42A004318A5 /* LibXray.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		394B2E672E1FA562004318A5 /* com.nagorik.v2rayMobile.XrayTunnelMac.systemextension in Embed System Extensions */ = {isa = PBXBuildFile; fileRef = 394B2DFA2E1F9165004318A5 /* com.nagorik.v2rayMobile.XrayTunnelMac.systemextension */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		394B2E762E1FA741004318A5 /* libresolv.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = 394B2E5D2E1FA227004318A5 /* libresolv.tbd */; };
 		3FA2E3239EC11FC4C956CFF1 /* Pods_RunnerTests.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B85658713873F1F728E479AE /* Pods_RunnerTests.framework */; };
 /* End PBXBuildFile section */
@@ -52,13 +51,6 @@
 			proxyType = 1;
 			remoteGlobalIDString = 33CC111A2044C6BA0003C045;
 			remoteInfo = FLX;
-		};
-		394B2E682E1FA562004318A5 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 33CC10E52044A3C60003C045 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 394B2DF92E1F9165004318A5;
-			remoteInfo = XrayTunnelMac;
 		};
 		394B2E6B2E1FA599004318A5 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -93,17 +85,6 @@
 				394B2E662E1FA42A004318A5 /* LibXray.xcframework in Bundle Framework */,
 			);
 			name = "Bundle Framework";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		394B2E6A2E1FA562004318A5 /* Embed System Extensions */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "$(SYSTEM_EXTENSIONS_FOLDER_PATH)";
-			dstSubfolderSpec = 16;
-			files = (
-				394B2E672E1FA562004318A5 /* com.nagorik.v2rayMobile.XrayTunnelMac.systemextension in Embed System Extensions */,
-			);
-			name = "Embed System Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXCopyFilesBuildPhase section */
@@ -338,13 +319,11 @@
 				33CC110E2044A8840003C045 /* Bundle Framework */,
 				3399D490228B24CF009A79C7 /* ShellScript */,
 				3A53D9EE6D5CCD0738D5E82A /* [CP] Embed Pods Frameworks */,
-				394B2E6A2E1FA562004318A5 /* Embed System Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 				33CC11202044C79F0003C045 /* PBXTargetDependency */,
-				394B2E692E1FA562004318A5 /* PBXTargetDependency */,
 				394B2E6C2E1FA599004318A5 /* PBXTargetDependency */,
 				394B2E6E2E1FA5A0004318A5 /* PBXTargetDependency */,
 				394B2E752E1FA687004318A5 /* PBXTargetDependency */,
@@ -601,11 +580,6 @@
 			isa = PBXTargetDependency;
 			target = 33CC111A2044C6BA0003C045 /* Flutter Assemble */;
 			targetProxy = 33CC111F2044C79F0003C045 /* PBXContainerItemProxy */;
-		};
-		394B2E692E1FA562004318A5 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = 394B2DF92E1F9165004318A5 /* XrayTunnelMac */;
-			targetProxy = 394B2E682E1FA562004318A5 /* PBXContainerItemProxy */;
 		};
 		394B2E6C2E1FA599004318A5 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
