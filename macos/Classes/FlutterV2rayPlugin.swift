@@ -16,25 +16,32 @@ public class FlutterV2rayPlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
     private var downloadSpeed: Int = 0
     
     public static func register(with registrar: FlutterPluginRegistrar) {
+        NSLog("🔧 [FlutterV2rayPlugin] Registering FlutterV2rayPlugin")
+        
         let channel = FlutterMethodChannel(name: "flutter_v2ray", binaryMessenger: registrar.messenger)
         let instance = FlutterV2rayPlugin()
         registrar.addMethodCallDelegate(instance, channel: channel)
         let eventChannel = FlutterEventChannel(name: "flutter_v2ray/status", binaryMessenger: registrar.messenger)
         eventChannel.setStreamHandler(instance)
+        
+        NSLog("✅ [FlutterV2rayPlugin] FlutterV2rayPlugin registered successfully")
     }
     
     
     public func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
+        NSLog("📡 [FlutterV2rayPlugin] Event stream listener started")
         self.eventSink = events
         return nil
     }
     
     public func onCancel(withArguments arguments: Any?) -> FlutterError? {
+        NSLog("📡 [FlutterV2rayPlugin] Event stream listener cancelled")
         self.eventSink = nil
         return nil
     }
     
     private func startTimer() {
+        NSLog("⏰ [FlutterV2rayPlugin] Starting status timer")
         self.timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true, block: { _ in
             let elapsed = Date().timeIntervalSince(self.packetTunnelManager?.connectedDate ?? Date())
             let time = Int(elapsed)
@@ -54,16 +61,18 @@ public class FlutterV2rayPlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
                             self.downloadSpeed = down - self.totalDownload
                             self.totalUpload = up
                             self.totalDownload = down
+                            NSLog("📊 [FlutterV2rayPlugin] Traffic updated - Upload: \(self.uploadSpeed), Download: \(self.downloadSpeed)")
                         }
                     }
                 }catch{
-                    print("Error in traffic: \(error.localizedDescription)")
+                    NSLog("❌ [FlutterV2rayPlugin] Error in traffic: \(error.localizedDescription)")
                 }
             }
         })
     }
     
     private func stopTimer() {
+        NSLog("⏰ [FlutterV2rayPlugin] Stopping status timer")
         self.timer?.invalidate()
         self.timer = nil
         self.eventSink?(["00:00:00", "0", "0", "0", "0", "DISCONNECTED"])
@@ -74,43 +83,60 @@ public class FlutterV2rayPlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
     }
     
     public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        NSLog("📞 [FlutterV2rayPlugin] Method called: \(call.method)")
+        
         switch call.method {
         case "requestPermission":
+            NSLog("🔐 [FlutterV2rayPlugin] Requesting permission")
             requestPermission(result: result)
         case "initializeV2Ray":
+            NSLog("🏁 [FlutterV2rayPlugin] Initializing V2Ray")
             initializeV2Ray(call: call, result: result)
         case "startV2Ray":
+            NSLog("🚀 [FlutterV2rayPlugin] Starting V2Ray")
             startV2Ray(call: call, result: result)
         case "stopV2Ray":
+            NSLog("🛑 [FlutterV2rayPlugin] Stopping V2Ray")
             stopV2Ray(result: result)
         case "getCoreVersion":
+            NSLog("🔧 [FlutterV2rayPlugin] Getting core version")
             getCoreVersion(result: result)
         case "getConnectedServerDelay":
+            NSLog("⏱️ [FlutterV2rayPlugin] Getting connected server delay")
             getConnectedServerDelay(call: call, result: result)
         case "getServerDelay":
+            NSLog("⏱️ [FlutterV2rayPlugin] Getting server delay")
             getServerDelay(call: call, result: result)
         default:
+            NSLog("❌ [FlutterV2rayPlugin] Unknown method: \(call.method)")
             result(FlutterMethodNotImplemented)
         }
     }
     
     private func stopV2Ray(result: FlutterResult) {
+        NSLog("🛑 [FlutterV2rayPlugin] Stopping V2Ray tunnel")
         packetTunnelManager?.stop()
         stopTimer()
+        NSLog("✅ [FlutterV2rayPlugin] V2Ray stopped successfully")
         result(nil)
     }
     
     private func getConnectedServerDelay(call: FlutterMethodCall, result: @escaping FlutterResult){
         guard let arguments = call.arguments as? [String: Any],
               let url = arguments["url"] as? String else{
+            NSLog("❌ [FlutterV2rayPlugin] Invalid arguments for getConnectedServerDelay")
             result(FlutterError(code: "INVALID_ARGUMENTS", message: "Invalid arguments for getConnectedServerDelay.", details: nil))
             return
         }
+        NSLog("⏱️ [FlutterV2rayPlugin] Testing connected server delay for URL: \(url)")
         Task {
             do {
                 let delay = try await packetTunnelManager?.sendProviderMessage(data: "xray_delay\(url)".data(using: .utf8)!) ?? "-1".data(using: .utf8)!
-                result(Int(String(decoding: delay, as: UTF8.self)))
+                let delayValue = Int(String(decoding: delay, as: UTF8.self))
+                NSLog("⏱️ [FlutterV2rayPlugin] Connected server delay: \(delayValue ?? -1)ms")
+                result(delayValue)
             }catch{
+                NSLog("❌ [FlutterV2rayPlugin] Error getting connected server delay: \(error.localizedDescription)")
                 result(-1)
             }
         }
@@ -120,9 +146,11 @@ public class FlutterV2rayPlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
         guard let arguments = call.arguments as? [String: Any],
               let url = arguments["url"] as? String,
               let config = arguments["config"] as? String else{
+            NSLog("❌ [FlutterV2rayPlugin] Invalid arguments for getServerDelay")
             result(FlutterError(code: "INVALID_ARGUMENTS", message: "Invalid arguments for getServerDelay.", details: nil))
             return
         }
+        NSLog("⏱️ [FlutterV2rayPlugin] Testing server delay for URL: \(url)")
         Task {
             // Create a ping request with the config and URL
             let pingConfig = """
@@ -133,6 +161,7 @@ public class FlutterV2rayPlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
             """
             
             if let base64Config = pingConfig.data(using: .utf8)?.base64EncodedString() {
+                NSLog("🔧 [FlutterV2rayPlugin] Sending ping request to LibXray")
                 let pingResult = LibXrayPing(base64Config)
                 
                 // Parse the result which should be base64 encoded JSON
@@ -145,17 +174,22 @@ public class FlutterV2rayPlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
                            let success = json["success"] as? Bool,
                            success,
                            let data = json["data"] as? Int {
+                            NSLog("⏱️ [FlutterV2rayPlugin] Server delay result: \(data)ms")
                             result(data)
                         } else {
+                            NSLog("❌ [FlutterV2rayPlugin] Ping failed or returned invalid data")
                             result(-1)
                         }
                     } catch {
+                        NSLog("❌ [FlutterV2rayPlugin] Error parsing ping result: \(error.localizedDescription)")
                         result(-1)
                     }
                 } else {
+                    NSLog("❌ [FlutterV2rayPlugin] Invalid ping result format")
                     result(-1)
                 }
             } else {
+                NSLog("❌ [FlutterV2rayPlugin] Failed to encode ping config")
                 result(-1)
             }
         }
@@ -166,18 +200,26 @@ public class FlutterV2rayPlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
               let remark = arguments["remark"] as? String,
               let config = arguments["config"] as? String,
               let configData = config.data(using: .utf8) else {
+            NSLog("❌ [FlutterV2rayPlugin] Invalid arguments for startV2Ray")
             result(FlutterError(code: "INVALID_ARGUMENTS", message: "Invalid arguments for startV2Ray.", details: nil))
             return
         }
+        NSLog("🚀 [FlutterV2rayPlugin] Starting V2Ray with remark: \(remark)")
+        NSLog("🔧 [FlutterV2rayPlugin] Config length: \(config.count) characters")
+        
         packetTunnelManager?.remark = remark
         packetTunnelManager?.xrayConfig = configData
         Task {
             do {
+                NSLog("💾 [FlutterV2rayPlugin] Saving VPN preferences")
                 try await packetTunnelManager?.saveToPreferences()
+                NSLog("🚀 [FlutterV2rayPlugin] Starting VPN tunnel")
                 try await packetTunnelManager?.start()
+                NSLog("✅ [FlutterV2rayPlugin] V2Ray started successfully")
                 result(nil)
                 return
             } catch {
+                NSLog("❌  Failed to start VPN: \(error.localizedDescription)")
                 result(FlutterError(code: "VPN_ERROR",
                                     message: "Failed to start VPN: \(error.localizedDescription)",
                                     details: nil))
@@ -189,15 +231,20 @@ public class FlutterV2rayPlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
     }
     
     private func requestPermission(result: @escaping FlutterResult) {
+        NSLog("🔐 [FlutterV2rayPlugin] Requesting VPN permission")
         Task {
             let isGranted = await packetTunnelManager?.testSaveAndLoadProfile() ?? false
+            NSLog("🔐 [FlutterV2rayPlugin] Permission result: \(isGranted)")
             result(isGranted)
         }
     }
     
     private func getCoreVersion(result: @escaping FlutterResult) {
+        NSLog("🔧 [FlutterV2rayPlugin] Getting LibXray version")
         Task {
-            result(LibXrayXrayVersion())
+            let version = LibXrayXrayVersion()
+            NSLog("🔧 [FlutterV2rayPlugin] LibXray version: \(version)")
+            result(version)
         }
     }
     
@@ -205,16 +252,23 @@ public class FlutterV2rayPlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
         guard let arguments = call.arguments as? [String: Any],
               let providerBundleIdentifier = arguments["providerBundleIdentifier"] as? String,
               let groupIdentifier = arguments["groupIdentifier"] as? String else {
+            NSLog("❌ [FlutterV2rayPlugin] Invalid arguments for initializeV2Ray")
             result(FlutterError(code: "INVALID_ARGUMENTS", message: "Invalid arguments for initializeV2Ray.", details: nil))
             return
         }
-        self.packetTunnelManager = PacketTunnelManager(providerBundleIdentifier: "\(providerBundleIdentifier).XrayTunnel", groupIdentifier: groupIdentifier)
-//        if self.packetTunnelManager?.connectedDate != nil{
-//            startTimer()
-//        }
+        NSLog("🏁 [FlutterV2rayPlugin] Initializing V2Ray")
+        NSLog("📦 [FlutterV2rayPlugin] Provider bundle ID: \(providerBundleIdentifier)")
+        NSLog("👥 [FlutterV2rayPlugin] Group ID: \(groupIdentifier)")
+        
+        self.packetTunnelManager = PacketTunnelManager(providerBundleIdentifier: "\(providerBundleIdentifier).XrayTunnelMac", groupIdentifier: groupIdentifier)
+        
         if self.packetTunnelManager?.status != NEVPNStatus.disconnected{
+            NSLog("🔄 [FlutterV2rayPlugin] VPN is already connected, starting timer")
             startTimer()
+        } else {
+            NSLog("📴 [FlutterV2rayPlugin] VPN is disconnected")
         }
+        NSLog("✅ [FlutterV2rayPlugin] V2Ray initialized successfully")
         result(nil)
     }
 }

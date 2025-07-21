@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 54;
+	objectVersion = 70;
 	objects = {
 
 /* Begin PBXAggregateTarget section */
@@ -30,12 +30,12 @@
 		33CC11132044BFA00003C045 /* MainFlutterWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33CC11122044BFA00003C045 /* MainFlutterWindow.swift */; };
 		394B2DFC2E1F9165004318A5 /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 394B2DFB2E1F9165004318A5 /* NetworkExtension.framework */; };
 		394B2E5E2E1FA233004318A5 /* libresolv.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = 394B2E5D2E1FA227004318A5 /* libresolv.tbd */; };
-		394B2E612E1FA2B7004318A5 /* Tun2SocksKit in Frameworks */ = {isa = PBXBuildFile; productRef = 394B2E602E1FA2B7004318A5 /* Tun2SocksKit */; };
-		394B2E632E1FA2B7004318A5 /* Tun2SocksKitC in Frameworks */ = {isa = PBXBuildFile; productRef = 394B2E622E1FA2B7004318A5 /* Tun2SocksKitC */; };
 		394B2E662E1FA42A004318A5 /* LibXray.xcframework in Bundle Framework */ = {isa = PBXBuildFile; fileRef = 394B2E642E1FA42A004318A5 /* LibXray.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		394B2E762E1FA741004318A5 /* libresolv.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = 394B2E5D2E1FA227004318A5 /* libresolv.tbd */; };
 		39ECCB322E2E1501001E4ACB /* LibXray.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 394B2E642E1FA42A004318A5 /* LibXray.xcframework */; };
 		39ECCB572E2E1B2D001E4ACB /* FamilyControls.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 39ECCB562E2E1B2D001E4ACB /* FamilyControls.framework */; };
+		39ECCBA02E2E2E44001E4ACB /* Tun2SocksKit in Frameworks */ = {isa = PBXBuildFile; productRef = 39ECCB9F2E2E2E44001E4ACB /* Tun2SocksKit */; };
+		39ECCBA22E2E2E44001E4ACB /* Tun2SocksKitC in Frameworks */ = {isa = PBXBuildFile; productRef = 39ECCBA12E2E2E44001E4ACB /* Tun2SocksKitC */; };
 		3FA2E3239EC11FC4C956CFF1 /* Pods_RunnerTests.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B85658713873F1F728E479AE /* Pods_RunnerTests.framework */; };
 /* End PBXBuildFile section */
 
@@ -166,11 +166,11 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				39ECCBA02E2E2E44001E4ACB /* Tun2SocksKit in Frameworks */,
 				39ECCB322E2E1501001E4ACB /* LibXray.xcframework in Frameworks */,
-				394B2E632E1FA2B7004318A5 /* Tun2SocksKitC in Frameworks */,
+				39ECCBA22E2E2E44001E4ACB /* Tun2SocksKitC in Frameworks */,
 				394B2DFC2E1F9165004318A5 /* NetworkExtension.framework in Frameworks */,
 				394B2E5E2E1FA233004318A5 /* libresolv.tbd in Frameworks */,
-				394B2E612E1FA2B7004318A5 /* Tun2SocksKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -356,8 +356,8 @@
 			);
 			name = XrayTunnelMac;
 			packageProductDependencies = (
-				394B2E602E1FA2B7004318A5 /* Tun2SocksKit */,
-				394B2E622E1FA2B7004318A5 /* Tun2SocksKitC */,
+				39ECCB9F2E2E2E44001E4ACB /* Tun2SocksKit */,
+				39ECCBA12E2E2E44001E4ACB /* Tun2SocksKitC */,
 			);
 			productName = XrayTunnel;
 			productReference = 394B2DFA2E1F9165004318A5 /* com.nagorik.v2rayMobile.XrayTunnelMac.systemextension */;
@@ -406,7 +406,7 @@
 			);
 			mainGroup = 33CC10E42044A3C60003C045;
 			packageReferences = (
-				394B2E5F2E1FA2B7004318A5 /* XCRemoteSwiftPackageReference "Tun2SocksKit" */,
+				39ECCB9E2E2E2E44001E4ACB /* XCRemoteSwiftPackageReference "Tun2SocksKit" */,
 			);
 			productRefGroup = 33CC10EE2044A3C60003C045 /* Products */;
 			projectDirPath = "";
@@ -1100,7 +1100,7 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		394B2E5F2E1FA2B7004318A5 /* XCRemoteSwiftPackageReference "Tun2SocksKit" */ = {
+		39ECCB9E2E2E2E44001E4ACB /* XCRemoteSwiftPackageReference "Tun2SocksKit" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/blueboy-tm/Tun2SocksKit";
 			requirement = {
@@ -1111,14 +1111,14 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		394B2E602E1FA2B7004318A5 /* Tun2SocksKit */ = {
+		39ECCB9F2E2E2E44001E4ACB /* Tun2SocksKit */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 394B2E5F2E1FA2B7004318A5 /* XCRemoteSwiftPackageReference "Tun2SocksKit" */;
+			package = 39ECCB9E2E2E2E44001E4ACB /* XCRemoteSwiftPackageReference "Tun2SocksKit" */;
 			productName = Tun2SocksKit;
 		};
-		394B2E622E1FA2B7004318A5 /* Tun2SocksKitC */ = {
+		39ECCBA12E2E2E44001E4ACB /* Tun2SocksKitC */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 394B2E5F2E1FA2B7004318A5 /* XCRemoteSwiftPackageReference "Tun2SocksKit" */;
+			package = 39ECCB9E2E2E2E44001E4ACB /* XCRemoteSwiftPackageReference "Tun2SocksKit" */;
 			productName = Tun2SocksKitC;
 		};
 /* End XCSwiftPackageProductDependency section */
