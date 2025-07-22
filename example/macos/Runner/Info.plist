@@ -35,6 +35,8 @@
     </dict>
     <key>NSNetworkExtensionUsageDescription</key>
     <string>This app uses VPN to secure your internet connection</string>
+	<key>com.apple.developer.system-extension.install</key>
+    <true/>
     <key>UIBackgroundModes</key>
     <array>
         <string>network-extension</string>
