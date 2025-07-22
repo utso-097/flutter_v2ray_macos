@@ -126,6 +126,21 @@ class FlutterV2ray {
     return await FlutterV2rayPlatform.instance.getCoreVersion();
   }
 
+  /// Test Network Extension configuration
+  Future<String> testNetworkExtensionConfiguration() async {
+    return await FlutterV2rayPlatform.instance.testNetworkExtensionConfiguration();
+  }
+
+  /// Check Network Extension installation
+  Future<String> checkNetworkExtensionInstallation() async {
+    return await FlutterV2rayPlatform.instance.checkNetworkExtensionInstallation();
+  }
+
+  /// Install system extension (macOS only)
+  Future<String> installSystemExtension() async {
+    return await FlutterV2rayPlatform.instance.installSystemExtension();
+  }
+
   /// parse V2RayURL object from V2Ray share link
   ///
   /// like vmess://, vless://, trojan://, ss://, socks://

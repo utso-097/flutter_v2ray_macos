@@ -68,4 +68,18 @@ abstract class FlutterV2rayPlatform extends PlatformInterface {
       'getCoreVersion() has not been implemented.',
     );
   }
+
+  Future<String> testNetworkExtensionConfiguration() async {
+    throw UnimplementedError(
+      'testNetworkExtensionConfiguration() has not been implemented.',
+    );
+  }
+
+  Future<String> checkNetworkExtensionInstallation() {
+    throw UnimplementedError('checkNetworkExtensionInstallation() has not been implemented.');
+  }
+
+  Future<String> installSystemExtension() {
+    throw UnimplementedError('installSystemExtension() has not been implemented.');
+  }
 }

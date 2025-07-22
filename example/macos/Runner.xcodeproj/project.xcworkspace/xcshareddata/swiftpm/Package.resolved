@@ -1,13 +1,13 @@
 {
-  "originHash" : "7a50814a7bfdab888b2890bbb1f9af495f5b10bb88a69a41a532bf6a31af1a0f",
+  "originHash" : "957b1ed25696e59c7f65a0092ad37a942c768c7b0527d67fc89b83875201765b",
   "pins" : [
     {
       "identity" : "tun2sockskit",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/blueboy-tm/Tun2SocksKit",
+      "location" : "https://github.com/EbrahimTahernejad/Tun2SocksKit",
       "state" : {
-        "revision" : "3ffef21435e14c417d9c134b2d5fb0827b160d42",
-        "version" : "4.7.6"
+        "revision" : "04e607172ac03a728f74dc08e1f0a737cb0528d4",
+        "version" : "4.11.0"
       }
     }
   ],

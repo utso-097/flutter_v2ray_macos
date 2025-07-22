@@ -194,7 +194,7 @@ class _HomePageState extends State<HomePage> {
         .initializeV2Ray(
       notificationIconResourceType: "mipmap",
       notificationIconResourceName: "ic_launcher",
-      providerBundleIdentifier: "com.nagorik.v2rayMobile",
+      providerBundleIdentifier: "com.nagorik.v2rayMobile.XrayTunnelMac",
       groupIdentifier: "group.com.nagorik.v2rayMobile",
     )
         .then((value) async {
@@ -368,6 +368,29 @@ class _HomePageState extends State<HomePage> {
                       }
                     },
                     child: const Text('Check Network Extension'),
+                  ),
+                  const SizedBox(height: 10),
+                  ElevatedButton(
+                    onPressed: () async {
+                      developer.log('🔧 Installing system extension...', name: 'V2RayApp');
+                      try {
+                        final result = await flutterV2ray.installSystemExtension();
+                        developer.log('✅ System extension installation: $result', name: 'V2RayApp');
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('System Extension Installation: $result')),
+                          );
+                        }
+                      } catch (error) {
+                        developer.log('❌ System extension installation failed: $error', name: 'V2RayApp');
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('System Extension Installation Failed: $error')),
+                          );
+                        }
+                      }
+                    },
+                    child: const Text('Install System Extension'),
                   ),
                 ],
               ),

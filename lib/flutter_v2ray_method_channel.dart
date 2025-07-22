@@ -90,4 +90,19 @@ class MethodChannelFlutterV2ray extends FlutterV2rayPlatform {
   Future<String> getCoreVersion() async {
     return await methodChannel.invokeMethod('getCoreVersion');
   }
+
+  @override
+  Future<String> testNetworkExtensionConfiguration() async {
+    return await methodChannel.invokeMethod('testNetworkExtensionConfiguration');
+  }
+
+  @override
+  Future<String> checkNetworkExtensionInstallation() async {
+    return await methodChannel.invokeMethod('checkNetworkExtensionInstallation');
+  }
+
+  @override
+  Future<String> installSystemExtension() async {
+    return await methodChannel.invokeMethod('installSystemExtension');
+  }
 }

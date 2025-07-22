@@ -3,6 +3,7 @@ import AppKit
 import NetworkExtension
 import Combine
 import LibXray
+import SystemExtensions
 
 public class FlutterV2rayPlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
     
@@ -42,33 +43,45 @@ public class FlutterV2rayPlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
     
     private func startTimer() {
         NSLog("⏰ [FlutterV2rayPlugin] Starting status timer")
-        self.timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true, block: { _ in
-            let elapsed = Date().timeIntervalSince(self.packetTunnelManager?.connectedDate ?? Date())
-            let time = Int(elapsed)
-            let seconds = time % 60
-            let minutes = (time / 60) % 60
-            let hours = (time / 3600)
-            let duration =  String(format: "%0.2d:%0.2d:%0.2d",hours,minutes,seconds)
-            self.eventSink?([duration, "\(self.uploadSpeed)", "\(self.downloadSpeed)", "\(self.totalUpload)", "\(self.totalDownload)", "CONNECTED"])
-            Task{
-                do{
-                    let response =  try await self.packetTunnelManager?.sendProviderMessage(data: "xray_traffic".data(using: .utf8)!)
-                    if response != nil{
-                        let traffic = String(decoding: response!, as: UTF8.self)
-                        let parts = traffic.split(separator: ",")
-                        if let up = Int(parts[0]), let down = Int(parts[1]) {
-                            self.uploadSpeed = up - self.totalUpload
-                            self.downloadSpeed = down - self.totalDownload
-                            self.totalUpload = up
-                            self.totalDownload = down
-                            NSLog("📊 [FlutterV2rayPlugin] Traffic updated - Upload: \(self.uploadSpeed), Download: \(self.downloadSpeed)")
-                        }
-                    }
-                }catch{
-                    NSLog("❌ [FlutterV2rayPlugin] Error in traffic: \(error.localizedDescription)")
-                }
+        self.timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+            
+            let status = self.packetTunnelManager?.status ?? .invalid
+            let connectedDate = self.packetTunnelManager?.connectedDate ?? Date()
+            let duration = Int(Date().timeIntervalSince(connectedDate))
+            
+            let hours = duration / 3600
+            let minutes = (duration % 3600) / 60
+            let seconds = duration % 60
+            
+            let durationString = String(format: "%02d:%02d:%02d", hours, minutes, seconds)
+            
+            let uploadSpeed = self.uploadSpeed
+            let downloadSpeed = self.downloadSpeed
+            let totalUpload = self.totalUpload
+            let totalDownload = self.totalDownload
+            
+            let statusString: String
+            switch status {
+            case .connected:
+                statusString = "CONNECTED"
+            case .connecting:
+                statusString = "CONNECTING"
+            case .disconnecting:
+                statusString = "DISCONNECTING"
+            case .disconnected:
+                statusString = "DISCONNECTED"
+            case .reasserting:
+                statusString = "REASSERTING"
+            case .invalid:
+                statusString = "INVALID"
+            @unknown default:
+                statusString = "UNKNOWN"
             }
-        })
+            
+            let statusData = [durationString, "\(uploadSpeed)", "\(downloadSpeed)", "\(totalUpload)", "\(totalDownload)", statusString]
+            self.eventSink?(statusData)
+        }
     }
     
     private func stopTimer() {
@@ -107,6 +120,15 @@ public class FlutterV2rayPlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
         case "getServerDelay":
             NSLog("⏱️ [FlutterV2rayPlugin] Getting server delay")
             getServerDelay(call: call, result: result)
+        case "testNetworkExtensionConfiguration":
+            NSLog("🔧 [FlutterV2rayPlugin] Testing Network Extension configuration")
+            testNetworkExtensionConfiguration(result: result)
+        case "checkNetworkExtensionInstallation":
+            NSLog("🔧 [FlutterV2rayPlugin] Checking Network Extension installation")
+            checkNetworkExtensionInstallation(result: result)
+        case "installSystemExtension":
+            NSLog("🔧 [FlutterV2rayPlugin] Installing system extension")
+            installSystemExtension(result: result)
         default:
             NSLog("❌ [FlutterV2rayPlugin] Unknown method: \(call.method)")
             result(FlutterMethodNotImplemented)
@@ -145,89 +167,154 @@ public class FlutterV2rayPlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
     private func getServerDelay(call: FlutterMethodCall, result: @escaping FlutterResult) {
         guard let arguments = call.arguments as? [String: Any],
               let url = arguments["url"] as? String,
-              let config = arguments["config"] as? String else{
+              let _ = arguments["config"] as? String else{
             NSLog("❌ [FlutterV2rayPlugin] Invalid arguments for getServerDelay")
             result(FlutterError(code: "INVALID_ARGUMENTS", message: "Invalid arguments for getServerDelay.", details: nil))
             return
         }
         NSLog("⏱️ [FlutterV2rayPlugin] Testing server delay for URL: \(url)")
         Task {
-            // Create a ping request with the config and URL
-            let pingConfig = """
-            {
-                "config": "\(config)",
-                "url": "\(url)"
-            }
-            """
-            
-            if let base64Config = pingConfig.data(using: .utf8)?.base64EncodedString() {
-                NSLog("🔧 [FlutterV2rayPlugin] Sending ping request to LibXray")
-                let pingResult = LibXrayPing(base64Config)
-                
-                // Parse the result which should be base64 encoded JSON
-                if let resultData = Data(base64Encoded: pingResult),
-                   let resultString = String(data: resultData, encoding: .utf8),
-                   let jsonData = resultString.data(using: .utf8) {
-                    
-                    do {
-                        if let json = try JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
-                           let success = json["success"] as? Bool,
-                           success,
-                           let data = json["data"] as? Int {
-                            NSLog("⏱️ [FlutterV2rayPlugin] Server delay result: \(data)ms")
-                            result(data)
-                        } else {
-                            NSLog("❌ [FlutterV2rayPlugin] Ping failed or returned invalid data")
-                            result(-1)
-                        }
-                    } catch {
-                        NSLog("❌ [FlutterV2rayPlugin] Error parsing ping result: \(error.localizedDescription)")
-                        result(-1)
-                    }
-                } else {
-                    NSLog("❌ [FlutterV2rayPlugin] Invalid ping result format")
-                    result(-1)
-                }
-            } else {
-                NSLog("❌ [FlutterV2rayPlugin] Failed to encode ping config")
-                result(-1)
-            }
+            // For now, return -1 since LibXrayMeasureOutboundDelay is not available
+            // TODO: Implement proper delay measurement when LibXray API is available
+            NSLog("⚠️ [FlutterV2rayPlugin] Delay measurement not implemented yet")
+            result(-1)
         }
     }
     
+    private func initializeV2Ray(call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard let arguments = call.arguments as? [String: Any],
+              let providerBundleIdentifier = arguments["providerBundleIdentifier"] as? String,
+              let groupIdentifier = arguments["groupIdentifier"] as? String else {
+            NSLog("❌ [FlutterV2rayPlugin] Invalid arguments for initializeV2Ray")
+            result(FlutterError(code: "INVALID_ARGUMENTS", message: "Invalid arguments for initializeV2Ray.", details: nil))
+            return
+        }
+        
+        NSLog("🔧 [FlutterV2rayPlugin] Provider bundle identifier: \(providerBundleIdentifier)")
+        NSLog("🔧 [FlutterV2rayPlugin] Group identifier: \(groupIdentifier)")
+        
+        packetTunnelManager = PacketTunnelManager(providerBundleIdentifier: providerBundleIdentifier, groupIdentifier: groupIdentifier)
+        
+        NSLog("✅ [FlutterV2rayPlugin] V2Ray initialized successfully")
+        result(nil)
+    }
+    
     private func startV2Ray(call: FlutterMethodCall, result: @escaping FlutterResult) {
+        NSLog("🚀 [FlutterV2rayPlugin] Starting V2Ray")
+        
         guard let arguments = call.arguments as? [String: Any],
               let remark = arguments["remark"] as? String,
-              let config = arguments["config"] as? String,
-              let configData = config.data(using: .utf8) else {
+              let config = arguments["config"] as? String else {
             NSLog("❌ [FlutterV2rayPlugin] Invalid arguments for startV2Ray")
             result(FlutterError(code: "INVALID_ARGUMENTS", message: "Invalid arguments for startV2Ray.", details: nil))
             return
         }
-        NSLog("🚀 [FlutterV2rayPlugin] Starting V2Ray with remark: \(remark)")
+        
+        NSLog("🔧 [FlutterV2rayPlugin] Remark: \(remark)")
         NSLog("🔧 [FlutterV2rayPlugin] Config length: \(config.count) characters")
+        
+        // Configure the packet tunnel manager
+        guard let configData = config.data(using: .utf8) else {
+            NSLog("❌ [FlutterV2rayPlugin] Failed to convert config to data")
+            result(FlutterError(code: "CONFIG_ERROR", message: "Failed to convert config to data", details: nil))
+            return
+        }
         
         packetTunnelManager?.remark = remark
         packetTunnelManager?.xrayConfig = configData
+        
+        startTimer()
+        
         Task {
             do {
+                // Save VPN preferences first
                 NSLog("💾 [FlutterV2rayPlugin] Saving VPN preferences")
                 try await packetTunnelManager?.saveToPreferences()
+                NSLog("✅ [FlutterV2rayPlugin] VPN preferences saved successfully")
+                
+                // Try to start the VPN - this should trigger system extension installation if needed
                 NSLog("🚀 [FlutterV2rayPlugin] Starting VPN tunnel")
                 try await packetTunnelManager?.start()
                 NSLog("✅ [FlutterV2rayPlugin] V2Ray started successfully")
                 result(nil)
-                return
-            } catch {
-                NSLog("❌  Failed to start VPN: \(error.localizedDescription)")
-                result(FlutterError(code: "VPN_ERROR",
-                                    message: "Failed to start VPN: \(error.localizedDescription)",
-                                    details: nil))
                 stopTimer()
-                return
+            } catch {
+                NSLog("❌ [FlutterV2rayPlugin] Failed to start V2Ray: \(error.localizedDescription)")
+                
+                // Check if the error is related to missing system extension
+                let errorDescription = error.localizedDescription.lowercased()
+                if errorDescription.contains("not installed") || errorDescription.contains("system extension") {
+                    NSLog("🔧 [FlutterV2rayPlugin] Detected missing system extension, attempting to install...")
+                    
+                    // Try to install system extension manually
+                    do {
+                        let installResult = try await installSystemExtensionInternal()
+                        NSLog("✅ [FlutterV2rayPlugin] System extension installation completed: \(installResult)")
+                        
+                        // Wait a moment for the system to process the installation
+                        try await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
+                        
+                        // Try starting the VPN again after system extension installation
+                        NSLog("🚀 [FlutterV2rayPlugin] Retrying VPN start after system extension installation")
+                        try await packetTunnelManager?.start()
+                        NSLog("✅ [FlutterV2rayPlugin] V2Ray started successfully after system extension installation")
+                        result(nil)
+                        stopTimer()
+                        return
+                    } catch let installError {
+                        NSLog("❌ [FlutterV2rayPlugin] System extension installation failed: \(installError.localizedDescription)")
+                        result(FlutterError(code: "SYSTEM_EXTENSION_INSTALL_FAILED",
+                                          message: "Failed to install system extension: \(installError.localizedDescription)",
+                                          details: nil))
+                        stopTimer()
+                        return
+                    }
+                } else {
+                    result(FlutterError(code: "VPN_ERROR",
+                                        message: "Failed to start VPN: \(error.localizedDescription)",
+                                        details: nil))
+                    stopTimer()
+                    return
+                }
             }
         }
-        startTimer()
+    }
+    
+    private func installSystemExtensionInternal() async throws -> String {
+        NSLog("🔧 [FlutterV2rayPlugin] Installing system extension internally")
+
+        guard let packetTunnelManager = packetTunnelManager else {
+            throw NSError(domain: "FlutterV2rayPlugin", code: 1, userInfo: [NSLocalizedDescriptionKey: "PacketTunnelManager not initialized"])
+        }
+
+        guard let providerBundleIdentifier = packetTunnelManager.providerBundleIdentifier else {
+            throw NSError(domain: "FlutterV2rayPlugin", code: 2, userInfo: [NSLocalizedDescriptionKey: "Provider bundle identifier is missing"])
+        }
+
+        NSLog("🔧 [FlutterV2rayPlugin] Provider bundle identifier: \(providerBundleIdentifier)")
+
+        // Try to trigger system extension installation by attempting to save preferences
+        // This should automatically trigger the system extension installation if needed
+        do {
+            try await packetTunnelManager.saveToPreferences()
+            NSLog("✅ [FlutterV2rayPlugin] Preferences saved successfully, system extension should be available")
+            return "System extension installation triggered via preferences save"
+        } catch {
+            NSLog("⚠️ [FlutterV2rayPlugin] Preferences save failed, trying direct system extension installation: \(error.localizedDescription)")
+            
+            // Fallback to direct system extension installation
+            let request = OSSystemExtensionRequest.activationRequest(forExtensionWithIdentifier: providerBundleIdentifier, queue: .main)
+            request.delegate = self
+
+            NSLog("🔧 [FlutterV2rayPlugin] Submitting direct system extension installation request...")
+            
+            // Submit the request
+            let manager = OSSystemExtensionManager.shared
+            manager.submitRequest(request)
+
+            NSLog("✅ [FlutterV2rayPlugin] System extension installation request submitted successfully")
+            return "System extension installation request submitted"
+        }
     }
     
     private func requestPermission(result: @escaping FlutterResult) {
@@ -248,28 +335,163 @@ public class FlutterV2rayPlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
         }
     }
     
-    private func initializeV2Ray(call: FlutterMethodCall, result: @escaping FlutterResult) {
-        guard let arguments = call.arguments as? [String: Any],
-              let providerBundleIdentifier = arguments["providerBundleIdentifier"] as? String,
-              let groupIdentifier = arguments["groupIdentifier"] as? String else {
-            NSLog("❌ [FlutterV2rayPlugin] Invalid arguments for initializeV2Ray")
-            result(FlutterError(code: "INVALID_ARGUMENTS", message: "Invalid arguments for initializeV2Ray.", details: nil))
+    private func testNetworkExtensionConfiguration(result: @escaping FlutterResult) {
+        NSLog("🔧 [FlutterV2rayPlugin] Testing Network Extension configuration")
+        
+        guard let packetTunnelManager = packetTunnelManager else {
+            NSLog("❌ [FlutterV2rayPlugin] PacketTunnelManager not initialized")
+            result(FlutterError(code: "NOT_INITIALIZED", message: "V2Ray not initialized", details: nil))
             return
         }
-        NSLog("🏁 [FlutterV2rayPlugin] Initializing V2Ray")
-        NSLog("📦 [FlutterV2rayPlugin] Provider bundle ID: \(providerBundleIdentifier)")
-        NSLog("👥 [FlutterV2rayPlugin] Group ID: \(groupIdentifier)")
         
-        self.packetTunnelManager = PacketTunnelManager(providerBundleIdentifier: "\(providerBundleIdentifier).XrayTunnelMac", groupIdentifier: groupIdentifier)
-        
-        if self.packetTunnelManager?.status != NEVPNStatus.disconnected{
-            NSLog("🔄 [FlutterV2rayPlugin] VPN is already connected, starting timer")
-            startTimer()
-        } else {
-            NSLog("📴 [FlutterV2rayPlugin] VPN is disconnected")
+        Task {
+            do {
+                // Test if we can save preferences
+                NSLog("🔧 [FlutterV2rayPlugin] Testing VPN preferences save")
+                try await packetTunnelManager.saveToPreferences()
+                NSLog("✅ [FlutterV2rayPlugin] VPN preferences save test passed")
+                
+                // Test if we can load the manager
+                NSLog("🔧 [FlutterV2rayPlugin] Testing manager load")
+                let manager = await packetTunnelManager.loadTunnelProviderManager()
+                if let manager = manager {
+                    NSLog("✅ [FlutterV2rayPlugin] Manager load test passed")
+                    NSLog("🔧 [FlutterV2rayPlugin] Manager enabled: \(manager.isEnabled)")
+                    NSLog("🔧 [FlutterV2rayPlugin] Connection status: \(manager.connection.status.rawValue)")
+                } else {
+                    NSLog("❌ [FlutterV2rayPlugin] Manager load test failed")
+                }
+                
+                result("Network Extension configuration test completed")
+            } catch {
+                NSLog("❌ [FlutterV2rayPlugin] Network Extension test failed: \(error.localizedDescription)")
+                result(FlutterError(code: "NETWORK_EXTENSION_TEST_FAILED", message: error.localizedDescription, details: nil))
+            }
         }
-        NSLog("✅ [FlutterV2rayPlugin] V2Ray initialized successfully")
-        result(nil)
+    }
+    
+    private func checkNetworkExtensionInstallation(result: @escaping FlutterResult) {
+        NSLog("🔧 [FlutterV2rayPlugin] Checking Network Extension installation")
+        
+        guard let packetTunnelManager = packetTunnelManager else {
+            NSLog("❌ [FlutterV2rayPlugin] PacketTunnelManager not initialized")
+            result(FlutterError(code: "NOT_INITIALIZED", message: "V2Ray not initialized", details: nil))
+            return
+        }
+        
+        Task {
+            do {
+                // Try to load all VPN configurations
+                let managers = try await NETunnelProviderManager.loadAllFromPreferences()
+                NSLog("🔧 [FlutterV2rayPlugin] Found \(managers.count) VPN configurations")
+                
+                for (index, manager) in managers.enumerated() {
+                    NSLog("🔧 [FlutterV2rayPlugin] Configuration \(index):")
+                    NSLog("  - Description: \(manager.localizedDescription ?? "nil")")
+                    NSLog("  - Enabled: \(manager.isEnabled)")
+                    NSLog("  - Status: \(manager.connection.status.rawValue)")
+                    
+                    if let protocolConfig = manager.protocolConfiguration as? NETunnelProviderProtocol {
+                        NSLog("  - Provider Bundle ID: \(protocolConfig.providerBundleIdentifier ?? "nil")")
+                        NSLog("  - Server Address: \(protocolConfig.serverAddress ?? "nil")")
+                    }
+                }
+                
+                // Check if our specific configuration exists
+                let ourManager = managers.first { manager in
+                    guard let protocolConfig = manager.protocolConfiguration as? NETunnelProviderProtocol else {
+                        return false
+                    }
+                    return protocolConfig.providerBundleIdentifier == packetTunnelManager.providerBundleIdentifier
+                }
+                
+                if let ourManager = ourManager {
+                    NSLog("✅ [FlutterV2rayPlugin] Our Network Extension configuration found")
+                    NSLog("  - Enabled: \(ourManager.isEnabled)")
+                    NSLog("  - Status: \(ourManager.connection.status.rawValue)")
+                } else {
+                    NSLog("❌ [FlutterV2rayPlugin] Our Network Extension configuration not found")
+                }
+                
+                result("Network Extension installation check completed")
+            } catch {
+                NSLog("❌ [FlutterV2rayPlugin] Error checking Network Extension installation: \(error.localizedDescription)")
+                result(FlutterError(code: "NETWORK_EXTENSION_CHECK_FAILED", message: error.localizedDescription, details: nil))
+            }
+        }
+    }
+    
+    private func installSystemExtension(result: @escaping FlutterResult) {
+        NSLog("🔧 [FlutterV2rayPlugin] Installing system extension")
+
+        guard let packetTunnelManager = packetTunnelManager else {
+            NSLog("❌ [FlutterV2rayPlugin] PacketTunnelManager not initialized")
+            result(FlutterError(code: "NOT_INITIALIZED", message: "V2Ray not initialized", details: nil))
+            return
+        }
+
+        guard let providerBundleIdentifier = packetTunnelManager.providerBundleIdentifier else {
+            NSLog("❌ [FlutterV2rayPlugin] Provider bundle identifier is missing")
+            result(FlutterError(code: "MISSING_BUNDLE_ID", message: "Provider bundle identifier is missing", details: nil))
+            return
+        }
+
+        NSLog("🔧 [FlutterV2rayPlugin] Provider bundle identifier: \(providerBundleIdentifier)")
+
+        Task {
+            // Check if system extension is already installed
+            let request = OSSystemExtensionRequest.activationRequest(forExtensionWithIdentifier: providerBundleIdentifier, queue: .main)
+            request.delegate = self
+
+            NSLog("🔧 [FlutterV2rayPlugin] Submitting system extension installation request...")
+            
+            // Submit the request
+            let manager = OSSystemExtensionManager.shared
+            manager.submitRequest(request)
+
+            NSLog("✅ [FlutterV2rayPlugin] System extension installation request submitted successfully")
+            result("System extension installation request submitted")
+        }
+    }
+}
+
+// MARK: - OSSystemExtensionRequestDelegate
+extension FlutterV2rayPlugin: OSSystemExtensionRequestDelegate {
+
+    public func request(_ request: OSSystemExtensionRequest, actionForReplacingExtension existing: OSSystemExtensionProperties, withExtension ext: OSSystemExtensionProperties) -> OSSystemExtensionRequest.ReplacementAction {
+        NSLog("🔧 [FlutterV2rayPlugin] System extension replacement requested")
+        NSLog("🔧 [FlutterV2rayPlugin] Existing extension: \(existing.bundleIdentifier)")
+        NSLog("🔧 [FlutterV2rayPlugin] New extension: \(ext.bundleIdentifier)")
+        return .replace
+    }
+
+    public func requestNeedsUserApproval(_ request: OSSystemExtensionRequest) {
+        NSLog("🔧 [FlutterV2rayPlugin] System extension installation needs user approval")
+        NSLog("🔧 [FlutterV2rayPlugin] User should see a system dialog requesting approval")
+    }
+
+    public func request(_ request: OSSystemExtensionRequest, didFinishWithResult result: OSSystemExtensionRequest.Result) {
+        NSLog("🔧 [FlutterV2rayPlugin] System extension installation finished with result: \(result.rawValue)")
+
+        switch result {
+        case .completed:
+            NSLog("✅ [FlutterV2rayPlugin] System extension installed successfully")
+        case .willCompleteAfterReboot:
+            NSLog("⚠️ [FlutterV2rayPlugin] System extension will complete after reboot")
+        @unknown default:
+            NSLog("❓ [FlutterV2rayPlugin] System extension installation result: \(result.rawValue)")
+        }
+    }
+
+    public func request(_ request: OSSystemExtensionRequest, didFailWithError error: Error) {
+        NSLog("❌ [FlutterV2rayPlugin] System extension installation failed with error: \(error.localizedDescription)")
+        
+        // Log additional error details
+        if let nsError = error as NSError? {
+            NSLog("❌ [FlutterV2rayPlugin] Error domain: \(nsError.domain)")
+            NSLog("❌ [FlutterV2rayPlugin] Error code: \(nsError.code)")
+            NSLog("❌ [FlutterV2rayPlugin] Error user info: \(nsError.userInfo)")
+        }
     }
 }
 final class PacketTunnelManager: ObservableObject {
@@ -326,8 +548,15 @@ final class PacketTunnelManager: ObservableObject {
     
     func saveToPreferences() async throws {
         guard let providerBundleIdentifier = providerBundleIdentifier else {
+            NSLog("❌ [PacketTunnelManager] Provider bundle identifier is missing")
             throw NSError(domain: "VPN", code: 1, userInfo: [NSLocalizedDescriptionKey: "Provider bundle identifier is missing."])
         }
+        
+        NSLog("🔧 [PacketTunnelManager] Saving VPN preferences")
+        NSLog("🔧 [PacketTunnelManager] Provider bundle ID: \(providerBundleIdentifier)")
+        NSLog("🔧 [PacketTunnelManager] Group ID: \(groupIdentifier ?? "nil")")
+        NSLog("🔧 [PacketTunnelManager] Remark: \(remark)")
+        NSLog("🔧 [PacketTunnelManager] Config size: \(xrayConfig.count) bytes")
         
         do {
             let manager = self.manager ?? NETunnelProviderManager()
@@ -347,9 +576,12 @@ final class PacketTunnelManager: ObservableObject {
                 return configuration
             }()
             manager.isEnabled = true
+            NSLog("🔧 [PacketTunnelManager] Configuration created, saving to preferences")
             try await manager.saveToPreferences()
+            NSLog("✅ [PacketTunnelManager] VPN preferences saved successfully")
         } catch {
-            print("Error saving VPN preferences: \(error.localizedDescription)")
+            NSLog("❌ [PacketTunnelManager] Error saving VPN preferences: \(error.localizedDescription)")
+            NSLog("❌ [PacketTunnelManager] Error domain: \((error as NSError).domain), code: \((error as NSError).code)")
             throw error
         }
     }
@@ -363,19 +595,29 @@ final class PacketTunnelManager: ObservableObject {
     
     func start() async throws {
         guard let manager = manager else {
+            NSLog("❌ [PacketTunnelManager] Manager not found")
             throw NSError(domain: "VPN", code: 1, userInfo: [NSLocalizedDescriptionKey: "Manager not found"])
         }
         
+        NSLog("🔧 [PacketTunnelManager] Manager found, checking if enabled")
+        NSLog("🔧 [PacketTunnelManager] Manager enabled: \(manager.isEnabled)")
+        NSLog("🔧 [PacketTunnelManager] Connection status: \(manager.connection.status.rawValue)")
+        
         if !manager.isEnabled {
+            NSLog("🔧 [PacketTunnelManager] Enabling manager")
             manager.isEnabled = true
             try await manager.saveToPreferences()
+            NSLog("✅ [PacketTunnelManager] Manager enabled and saved")
         }
         
         do {
-            // Assuming you have a manager instance of NETunnelProviderManager
-            try  manager.connection.startVPNTunnel()
+            NSLog("🚀 [PacketTunnelManager] Starting VPN tunnel")
+            try manager.connection.startVPNTunnel()
+            NSLog("✅ [PacketTunnelManager] VPN tunnel start command sent successfully")
         } catch {
-            print("Failed to start VPN tunnel: \(error.localizedDescription)")
+            NSLog("❌ [PacketTunnelManager] Failed to start VPN tunnel: \(error.localizedDescription)")
+            NSLog("❌ [PacketTunnelManager] Error domain: \((error as NSError).domain), code: \((error as NSError).code)")
+            throw error
         }
     }
     
@@ -422,7 +664,7 @@ final class PacketTunnelManager: ObservableObject {
     }
     
     
-    private func loadTunnelProviderManager() async -> NETunnelProviderManager? {
+    func loadTunnelProviderManager() async -> NETunnelProviderManager? {
         do {
             let managers = try await NETunnelProviderManager.loadAllFromPreferences()
             
