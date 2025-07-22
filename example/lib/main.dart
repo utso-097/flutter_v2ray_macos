@@ -325,6 +325,50 @@ class _HomePageState extends State<HomePage> {
                     onPressed: bypassSubnet,
                     child: const Text('Bypass Subnet'),
                   ),
+                  ElevatedButton(
+                    onPressed: () async {
+                      developer.log('🔧 Testing Network Extension configuration...', name: 'V2RayApp');
+                      try {
+                        final result = await flutterV2ray.testNetworkExtensionConfiguration();
+                        developer.log('✅ Network Extension test result: $result', name: 'V2RayApp');
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Network Extension Test: $result')),
+                          );
+                        }
+                      } catch (error) {
+                        developer.log('❌ Network Extension test failed: $error', name: 'V2RayApp');
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Network Extension Test Failed: $error')),
+                          );
+                        }
+                      }
+                    },
+                    child: const Text('Test Network Extension'),
+                  ),
+                  ElevatedButton(
+                    onPressed: () async {
+                      developer.log('🔧 Checking Network Extension installation...', name: 'V2RayApp');
+                      try {
+                        final result = await flutterV2ray.checkNetworkExtensionInstallation();
+                        developer.log('✅ Network Extension installation check: $result', name: 'V2RayApp');
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Network Extension Check: $result')),
+                          );
+                        }
+                      } catch (error) {
+                        developer.log('❌ Network Extension installation check failed: $error', name: 'V2RayApp');
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Network Extension Check Failed: $error')),
+                          );
+                        }
+                      }
+                    },
+                    child: const Text('Check Network Extension'),
+                  ),
                 ],
               ),
             ),

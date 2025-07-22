@@ -15,11 +15,15 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     
     override func startTunnel(options: [String : NSObject]? = nil) async throws {
         NSLog("🚀 [PacketTunnelProvider] Starting tunnel...")
+        NSLog("🔧 [PacketTunnelProvider] Process ID: \(ProcessInfo.processInfo.processIdentifier)")
+        NSLog("🔧 [PacketTunnelProvider] Bundle ID: \(Bundle.main.bundleIdentifier ?? "unknown")")
         
         do {
             // Log the options for debugging
             if let options = options {
                 NSLog("🔧 [PacketTunnelProvider] Tunnel options: \(options)")
+            } else {
+                NSLog("🔧 [PacketTunnelProvider] No tunnel options provided")
             }
             
             guard
@@ -262,3 +266,5 @@ class CustomLibXrayLogger: NSObject {
         print("LibXray Log: \(logMessage)")
     }
 }
+
+//log stream --predicate 'process == "flutter_v2ray_example" OR process == "XrayTunnelMac" OR subsystem == "com.nagorik.v2rayMobile"'
